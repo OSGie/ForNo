@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import { formatEgp } from "@shared/poc";
 import { contracts, leads, orders, trackingEvents, users, visitors, type InsertUser } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { buildDemoContractHtml } from "./poc-contract";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -127,10 +128,31 @@ export async function getContractByOrderId(orderId: string): Promise<DemoContrac
   return result[0] as DemoContract | undefined;
 }
 
+function legacyField(html: string, label: string) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = html.match(new RegExp(`<th>${escaped}</th><td(?: colspan="3")?>([^<]*)</td>`));
+  return (match?.[1] ?? "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;/g, "'");
+}
+
+async function refreshLegacyContract(order: DemoOrder, contract: DemoContract): Promise<DemoContract> {
+  const html = buildDemoContractHtml(contract.contractNumber, {
+    customerName: order.customerName, email: order.email, phone: order.phone,
+    taxCard: legacyField(contract.html, "رقم البطاقة الضريبية"), nationalId: legacyField(contract.html, "الرقم القومي"), commercialRegister: legacyField(contract.html, "رقم السجل التجاري"), address: legacyField(contract.html, "العنوان التفصيلي"),
+    planName: order.planName, packagePrice: formatMoney(order.subtotalPiastres), vat: formatMoney(order.vatPiastres), discount: formatMoney(order.discountPiastres), total: formatMoney(order.totalPiastres),
+  });
+  const refreshed = { ...contract, html, checksum: createHash("sha256").update(html).digest("hex") };
+  memoryContracts.set(order.orderId, refreshed);
+  const db = await getDb();
+  if (db) await db.update(contracts).set({ html: refreshed.html, checksum: refreshed.checksum }).where(eq(contracts.orderId, contract.orderId));
+  return refreshed;
+}
+
 export async function getContractByPaymentToken(token: string) {
   const order = await getOrderByPaymentToken(token);
   if (!order || order.status !== "PAID_DEMO") return undefined;
-  return getContractByOrderId(order.orderId);
+  const contract = await getContractByOrderId(order.orderId);
+  if (!contract || contract.html.includes("mofawtar-contract-stamp_968c5af8.png")) return contract;
+  return refreshLegacyContract(order, contract);
 }
 
 export async function getDashboardSummary() {

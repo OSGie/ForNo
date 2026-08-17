@@ -52,7 +52,8 @@ export const pocRouter = router({
     const quote = { planName: order.planName, packagePrice: order.subtotalPiastres, vat: order.vatPiastres, discount: order.discountPiastres, total: order.totalPiastres };
     const html = buildDemoContractHtml("PENDING", { ...input.details, planName: quote.planName, packagePrice: db.formatMoney(quote.packagePrice), vat: db.formatMoney(quote.vat), discount: db.formatMoney(quote.discount), total: db.formatMoney(quote.total) } satisfies ContractDetails);
     const contract = await db.createContract(order.orderId, html);
-    return contract;
+    await db.recordTrackingEvent({ eventId: `contract_${contract.contractId}`, eventName: "contract_generated", visitorId: order.visitorId, sessionId: "server", pagePath: "/contract", persona: order.persona as "firm" | "company", consentAnalytics: false, consentMarketing: false, properties: { orderId: order.orderId, contractNumber: contract.contractNumber, supportCopy: "queued_demo_only", recipient: "Support@mofawter.com" } });
+    return { ...contract, supportCopy: "queued_demo_only" as const };
   }),
   getContract: publicProcedure.input(z.object({ token: z.string().min(20) })).query(async ({ input }) => {
     return (await db.getContractByPaymentToken(input.token)) ?? null;
