@@ -29,4 +29,11 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(claims.issuance.documents.map(document => document.status)).toEqual(["مقبول", "تنبيه", "مجدولة", "إلغاء"]);
     expect(claims.issuance.benefits.at(-1)).toContain("مرحلة لاحقة");
   });
+
+  it("يوضح رحلة ما بعد الاشتراك في ثلاث خطوات دون تقديم وسائل الدفع كتكاملات مفعلة", () => {
+    expect(claims.onboarding.isPlaceholder).toBe(true);
+    expect(claims.onboarding.steps.map(step => step.number)).toEqual(["01", "02", "03"]);
+    expect(claims.onboarding.steps.at(-1)?.title).toBe("صدّر أول تقرير");
+    expect(claims.onboarding.paymentNote).toContain("رابط تجريبي");
+  });
 });
