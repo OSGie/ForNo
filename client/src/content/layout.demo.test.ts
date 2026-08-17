@@ -72,4 +72,12 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(layout.footer.contacts.map(contact => contact.kind)).toEqual(["phone", "phone", "email"]);
     expect(layout.footer.legal).toContain("سياسة الخصوصية");
   });
+
+  it("يعرض لكل شخصية شريط قرار مختصر يقود مباشرة إلى اختيار الباقة", () => {
+    expect(sales.decision.firm.items).toHaveLength(3);
+    expect(sales.decision.company.items).toHaveLength(3);
+    expect(sales.decision.firm.cta).toContain("المكتب");
+    expect(sales.decision.company.cta).toContain("باقتك");
+    expect(sales.decision.firm.title).not.toBe(sales.decision.company.title);
+  });
 });

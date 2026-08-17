@@ -97,4 +97,9 @@
 @media (min-width: 640px) { .container { padding-left: 1.5rem; padding-right: 1.5rem; } }
 @media (min-width: 1024px) { .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; } }
 @media (min-width: 768px) { .mof-section { padding-top: 6rem; padding-bottom: 6rem; } }
-@media (prefers-reduced-motion: no-preference) { .mof-reveal { animation: mof-reveal .55s cubic-bezier(.23,1,.32,1) both; } @keyframes mof-reveal { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } } }
+@media (prefers-reduced-motion: no-preference) {
+  .mof-reveal { animation: mof-reveal .55s cubic-bezier(.23,1,.32,1) both; }
+  .mof-orbit { animation: mof-orbit 10s cubic-bezier(.45,0,.55,1) infinite alternate; }
+  @keyframes mof-reveal { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes mof-orbit { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-24px, 18px, 0) scale(1.08); } }
+}
