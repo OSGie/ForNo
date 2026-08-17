@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PLANS } from "@shared/poc";
 import claims from "./claims.ar.json";
 import layout from "./layout.ar.json";
 import sales from "./sales.ar.json";
@@ -42,5 +43,17 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(sales.leadMagnet.email).toBeTruthy();
     expect(sales.leadMagnet.phone).toBeTruthy();
     expect(sales.leadMagnet.url).toBe("https://mofawtar.com/tax-calculator-2/");
+  });
+
+  it("يحسب قيمة الملف الشهرية لباقات المكاتب من السعر والسعة الفعليين", () => {
+    const monthlyFileCost = (sku: string) => {
+      const plan = PLANS.find(item => item.sku === sku);
+      if (!plan) throw new Error("missing plan");
+      return (plan.annualPiastres / 100) / plan.fileCount / 12;
+    };
+    expect(monthlyFileCost("professional")).toBeCloseTo(4.1666, 3);
+    expect(monthlyFileCost("expert")).toBeCloseTo(3.3333, 3);
+    expect(monthlyFileCost("elite")).toBeCloseTo(2.0833, 3);
+    expect(sales.pricing.body).toContain("14 يومًا وفق الشروط");
   });
 });
