@@ -22,4 +22,11 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(layout.capabilities.items.map(item => item.status)).toEqual(["available", "special", "coming", "coming"]);
     expect(Object.values(claims.capabilities).every(claim => claim.isPlaceholder && claim.body)).toBe(true);
   });
+
+  it("يعرض لوحة إصدار توضيحية بأربع حالات مستندات دون الادعاء بتفعيل تكامل PayTabs", () => {
+    expect(claims.issuance.isPlaceholder).toBe(true);
+    expect(claims.issuance.compliance).toBe("متوافق مع متطلبات مصلحة الضرائب المصرية");
+    expect(claims.issuance.documents.map(document => document.status)).toEqual(["مقبول", "تنبيه", "مجدولة", "إلغاء"]);
+    expect(claims.issuance.benefits.at(-1)).toContain("مرحلة لاحقة");
+  });
 });
