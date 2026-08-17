@@ -64,4 +64,12 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(sales.company.secondary).toContain("حاسبة المرتبات");
     expect(sales.firm.visual.title).not.toBe(sales.company.visual.title);
   });
+
+  it("يوفر فوتر موفوتر بيانات الموقع والروابط والتواصل القابلة للتحرير", () => {
+    expect(layout.footer.address).toContain("المقطم");
+    expect(layout.footer.quickLinks.map(link => link.id)).toContain("pricing");
+    expect(layout.footer.social).toHaveLength(3);
+    expect(layout.footer.contacts.map(contact => contact.kind)).toEqual(["phone", "phone", "email"]);
+    expect(layout.footer.legal).toContain("سياسة الخصوصية");
+  });
 });

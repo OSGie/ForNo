@@ -128,6 +128,33 @@
     ],
     "steps":["حدّد طبيعة العمل","استعرض حالة التشغيل","اختر الباقة والإضافات","راجع الإجمالي قبل الدفع"]
   },
+  "footer": {
+    "description": "مفوتر منصة مصرية تساعدك على إدارة الفواتير والإيصالات الإلكترونية، متابعة المشتريات، وتجهيز التقارير الضريبية من مكان واحد بسهولة وأمان.",
+    "issuer": "مفوتر — إصدار شركة تاكس إيجيبت",
+    "locationTitle": "الموقع",
+    "address": "8013 شارع 9 — المقطم — شقة رقم 6",
+    "quickTitle": "روابط سريعة",
+    "quickLinks": [
+      {"id":"home","label":"الرئيسية"},
+      {"id":"pricing","label":"الباقات"},
+      {"id":"articles","label":"المقالات قريبًا"},
+      {"id":"contact","label":"تواصل معنا"}
+    ],
+    "socialTitle": "تابعنا على",
+    "social": [
+      {"label":"facebook.com/mofawtar","url":"https://facebook.com/mofawtar"},
+      {"label":"instagram.com/mofawtar","url":"https://instagram.com/mofawtar"},
+      {"label":"youtube.com/mofawtar","url":"https://youtube.com/mofawtar"}
+    ],
+    "contactTitle": "تواصل معنا",
+    "contacts": [
+      {"kind":"phone","label":"02 25070904","url":"tel:+20225070904"},
+      {"kind":"phone","label":"+20 1050996319","url":"tel:+201050996319"},
+      {"kind":"email","label":"support@mofawtar.com","url":"mailto:support@mofawtar.com"}
+    ],
+    "legal": ["الشروط والأحكام", "سياسة الخصوصية"],
+    "copyright": "موفوتر — نموذج إثبات مفهوم لرحلة بيع SaaS"
+  },
   "faq": {
     "title":"أسئلة قبل اختيار الباقة",
     "items":[
