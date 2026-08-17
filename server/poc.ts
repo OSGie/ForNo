@@ -55,9 +55,7 @@ export const pocRouter = router({
     return contract;
   }),
   getContract: publicProcedure.input(z.object({ token: z.string().min(20) })).query(async ({ input }) => {
-    const contract = await db.getContractByPaymentToken(input.token);
-    if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "لم يُنشأ عقد لهذا الطلب بعد." });
-    return contract;
+    return (await db.getContractByPaymentToken(input.token)) ?? null;
   }),
   dashboard: adminProcedure.query(() => db.getDashboardSummary()),
 });
