@@ -56,4 +56,12 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(monthlyFileCost("elite")).toBeCloseTo(2.0833, 3);
     expect(sales.pricing.body).toContain("14 يومًا وفق الشروط");
   });
+
+  it("يفصل رسائل الـHero لمكاتب المحاسبة عن مسار المحاسب أو الشركة", () => {
+    expect(sales.firm.title).toContain("آخر الشهر");
+    expect(sales.company.title).toContain("الفواتير والتقارير");
+    expect(sales.firm.secondary).toContain("النظام");
+    expect(sales.company.secondary).toContain("حاسبة المرتبات");
+    expect(sales.firm.visual.title).not.toBe(sales.company.visual.title);
+  });
 });
