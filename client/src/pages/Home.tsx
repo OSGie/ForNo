@@ -1,33 +1,104 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+import content from "@/content/poc.ar.json";
+import { usePocTracking } from "@/hooks/usePocTracking";
+import { ADDONS, formatEgp, isCampaignActive, PLANS, PROMO } from "@shared/poc";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { trpc } from "@/lib/trpc";
+import { ArrowLeft, Check, ChevronDown, CircleHelp, Clock3, FileDown, Menu, MessageCircle, ShieldCheck, Sparkles, X } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
- */
+type Persona = "firm" | "company";
+type Consent = { analytics: boolean; marketing: boolean };
+const WHATSAPP_URL = "https://wa.me/201000000000?text=" + encodeURIComponent(content.whatsapp.message);
+
+function formatRemaining(ms: number) {
+  const safe = Math.max(0, ms);
+  const days = Math.floor(safe / 86400000); const hours = Math.floor((safe % 86400000) / 3600000); const minutes = Math.floor((safe % 3600000) / 60000); const seconds = Math.floor((safe % 60000) / 1000);
+  return { days, hours, minutes, seconds };
+}
+
+function scrollToId(id: string) { document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+
 export default function Home() {
-  // The useAuth hook provides authentication state.
-  // To implement login/logout, call logout(), or start login from an event
-  // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
-  // startLogin() during render (no href={startLogin()}) — it mints a one-time
-  // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
+  const [, setLocation] = useLocation();
+  const track = usePocTracking();
+  const leadMutation = trpc.poc.createLead.useMutation();
+  const [persona, setPersona] = useState<Persona>("firm");
+  const [offerDismissed, setOfferDismissed] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [consent, setConsent] = useState<Consent | null>(null);
+  const [consentDraft, setConsentDraft] = useState<Consent>({ analytics: false, marketing: false });
+  const [customizeConsent, setCustomizeConsent] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [files, setFiles] = useState(12);
+  const [leadSent, setLeadSent] = useState(false);
 
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  const campaignActive = isCampaignActive(new Date(now));
+  const remaining = useMemo(() => formatRemaining(new Date(PROMO.deadlineIso).getTime() - now), [now]);
+  const heroTitle = persona === "firm" ? content.hero.firmTitle : content.hero.companyTitle;
+  const heroText = persona === "firm" ? content.hero.firmText : content.hero.companyText;
 
-  return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
-    </div>
-  );
+  useEffect(() => {
+    const queryPersona = new URLSearchParams(window.location.search).get("p");
+    const saved = localStorage.getItem("mof_persona") as Persona | null;
+    const resolved = queryPersona === "company" || queryPersona === "firm" ? queryPersona : saved;
+    if (resolved) { setPersona(resolved); track("persona_resolved", { persona: resolved, uiContext: queryPersona ? "utm" : "storage" }); }
+    else track("session_started", { uiContext: "landing" });
+    track("page_view", { persona: resolved ?? "firm", uiContext: "landing" });
+    try { setConsent(JSON.parse(localStorage.getItem("mof_consent") ?? "null")); } catch { setConsent(null); }
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const eligible = () => window.scrollY > window.innerHeight * .45 || Date.now() - Number(sessionStorage.getItem("mof_entered_at") ?? Date.now()) > 35000;
+    if (!sessionStorage.getItem("mof_entered_at")) sessionStorage.setItem("mof_entered_at", String(Date.now()));
+    const leave = (event: MouseEvent) => {
+      const blocked = sessionStorage.getItem("mof_conversion_blocked") || localStorage.getItem("mof_exit_seen");
+      if (event.clientY <= 5 && eligible() && !blocked && consent) { setExitOpen(true); localStorage.setItem("mof_exit_seen", "1"); track("exit_intent_shown", { persona, uiContext: "desktop_exit" }); }
+    };
+    document.addEventListener("mouseout", leave);
+    return () => { window.clearInterval(timer); document.removeEventListener("mouseout", leave); };
+  }, [track, consent, persona]);
+
+  const choosePersona = (value: Persona) => { setPersona(value); localStorage.setItem("mof_persona", value); track("persona_selected", { persona: value, uiContext: "hero_persona" }); };
+  const updateConsent = (value: Consent) => { localStorage.setItem("mof_consent", JSON.stringify(value)); setConsent(value); window.dataLayer?.push({ event: "consent_updated", analytics_storage: value.analytics ? "granted" : "denied", ad_storage: value.marketing ? "granted" : "denied" }); track("consent_updated", { persona, uiContext: "cookie_banner", properties: value }); };
+  const startCheckout = (planSku: string) => { sessionStorage.setItem("mof_selected_plan", planSku); track("plan_selected", { persona, uiContext: "pricing", properties: { plan_sku: planSku } }); setLocation(`/checkout?plan=${planSku}&persona=${persona}`); };
+  const whatsapp = (placement: string) => { sessionStorage.setItem("mof_conversion_blocked", "whatsapp"); track("whatsapp_cta_clicked", { persona, uiContext: placement, properties: { placement } }); window.open(WHATSAPP_URL, "_blank", "noopener,noreferrer"); };
+  const downloadLead = () => { const blob = new Blob(["دليل موفوتر التجريبي\n\n1. اجمع الملفات في مكان واحد.\n2. حدد ما يحتاج متابعة.\n3. راجع أولويات نهاية الشهر.\n\nهذه نسخة Demo قابلة للاستبدال."], { type: "text/plain;charset=utf-8" }); const href = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = href; link.download = "mofawtar-lead-magnet-demo.txt"; link.click(); URL.revokeObjectURL(href); track("lead_magnet_downloaded", { persona, uiContext: "lead_section" }); };
+  const submitLead = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); const ctx = window.MofTrack?.context(); leadMutation.mutate({ name: String(data.get("name")), email: String(data.get("email")), phone: String(data.get("phone") ?? ""), visitorId: ctx?.visitorId ?? "preview-visitor", source: "lead_magnet", marketingOptIn: data.get("optin") === "on" }, { onSuccess: () => { setLeadSent(true); sessionStorage.setItem("mof_conversion_blocked", "lead"); track("lead_submitted", { persona, uiContext: "lead_section" }); downloadLead(); } }); };
+
+  return <div className="min-h-screen overflow-x-hidden bg-[#fbfbff] text-[#07081A]">
+    {campaignActive && !offerDismissed && <div className="sticky top-0 z-50 bg-[#07081A] px-4 py-2 text-white"><div className="container flex items-center justify-between gap-3 text-xs md:text-sm"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[#c6c9ff]"/><span className="font-semibold">{content.offer.label}</span><span className="hidden md:inline text-white/70">— {content.offer.detail}</span></div><div className="flex items-center gap-3"><button onClick={() => { track("promo_banner_clicked", { persona, uiContext: "promo_banner" }); scrollToId("pricing"); }} className="font-bold text-[#c6c9ff] hover:text-white">{content.offer.cta}</button><span dir="ltr" className="rounded-md bg-white/10 px-2 py-1 font-[Inter] text-[11px] tabular-nums">{remaining.days}d {String(remaining.hours).padStart(2, "0")}:{String(remaining.minutes).padStart(2, "0")}:{String(remaining.seconds).padStart(2, "0")}</span><button aria-label="إغلاق العرض" onClick={() => { setOfferDismissed(true); sessionStorage.setItem("mof_offer_dismissed", "1"); track("promo_banner_dismissed", { persona, uiContext: "promo_banner" }); }}><X className="h-4 w-4"/></button></div></div></div>}
+
+    <header className="sticky top-0 z-40 border-b border-[#4046B5]/10 bg-[#fbfbff]/90 backdrop-blur"><div className="container flex h-20 items-center justify-between gap-4"><a href="#top" className="flex items-center"><img src="/manus-storage/mofawtar-wordmark_74721d27.png" alt="مفوتر" className="h-10 w-auto" /></a><nav className="hidden items-center gap-7 text-sm font-semibold lg:flex"><a href="#workflow" className="hover:text-primary">{content.nav.products}</a><a href="#pricing" className="hover:text-primary">{content.nav.pricing}</a><a href="#faq" className="hover:text-primary">{content.nav.faq}</a></nav><div className="hidden lg:block"><Button onClick={() => scrollToId("pricing")} className="rounded-xl bg-[#4046B5] px-5 hover:bg-[#343aa0]">{content.nav.start}<ArrowLeft className="mr-2 h-4 w-4"/></Button></div><button onClick={() => setMobileMenu(value => !value)} className="rounded-xl border border-[#4046B5]/15 p-2 lg:hidden" aria-label="فتح القائمة">{mobileMenu ? <X/> : <Menu/>}</button></div>{mobileMenu && <div className="container border-t border-[#4046B5]/10 py-3 lg:hidden"><div className="grid gap-2 text-sm font-semibold"><a onClick={() => setMobileMenu(false)} href="#workflow">{content.nav.products}</a><a onClick={() => setMobileMenu(false)} href="#pricing">{content.nav.pricing}</a><a onClick={() => setMobileMenu(false)} href="#faq">{content.nav.faq}</a></div></div>}</header>
+
+    <main id="top">
+      <section className="mof-grid relative overflow-hidden"><div className="container grid min-h-[650px] items-center gap-10 py-14 lg:grid-cols-[1.05fr_.95fr] lg:py-20"><div className="relative z-10 mof-reveal"><div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#4046B5]/15 bg-white/80 px-3 py-1.5 text-xs font-bold text-[#4046B5]"><ShieldCheck className="h-4 w-4"/>{content.hero.eyebrow}</div><h1 className="max-w-2xl text-4xl font-extrabold leading-[1.25] tracking-tight md:text-6xl">{heroTitle}<span className="block text-[#4046B5]">{content.brand.tagline}</span></h1><p className="mt-6 max-w-xl text-base leading-8 text-[#4a4b65] md:text-lg">{heroText}</p><div className="mt-8 flex flex-wrap gap-3"><Button size="lg" onClick={() => { track("cta_clicked", { persona, uiContext: "hero_primary" }); scrollToId("pricing"); }} className="h-13 rounded-xl bg-[#4046B5] px-6 text-base hover:bg-[#343aa0]">{content.hero.primary}<ArrowLeft className="mr-2 h-4 w-4"/></Button><Button size="lg" variant="outline" onClick={() => whatsapp("hero_secondary")} className="h-13 rounded-xl border-[#4046B5]/25 bg-white px-6 text-base text-[#4046B5] hover:bg-[#ECECF7]"><MessageCircle className="ml-2 h-4 w-4"/>{content.hero.secondary}</Button></div><div className="mt-10"><p className="mb-3 text-sm font-bold text-[#33344f]">{content.hero.personaTitle}</p><div className="grid max-w-md grid-cols-2 gap-3"><button onClick={() => choosePersona("firm")} className={`rounded-2xl border p-4 text-right transition-all ${persona === "firm" ? "border-[#4046B5] bg-[#ECECF7] shadow-[0_14px_26px_-20px_#4046B5]" : "border-[#4046B5]/15 bg-white hover:border-[#4046B5]/45"}`}><span className="block text-sm font-extrabold">مكتب محاسبة</span><span className="mt-1 block text-xs text-[#64657a]">إدارة ملفات العملاء</span></button><button onClick={() => choosePersona("company")} className={`rounded-2xl border p-4 text-right transition-all ${persona === "company" ? "border-[#4046B5] bg-[#ECECF7] shadow-[0_14px_26px_-20px_#4046B5]" : "border-[#4046B5]/15 bg-white hover:border-[#4046B5]/45"}`}><span className="block text-sm font-extrabold">شركة</span><span className="mt-1 block text-xs text-[#64657a]">تنظيم عملياتك المالية</span></button></div></div></div><div className="relative mof-reveal"><div className="absolute -inset-7 rounded-[3rem] bg-[#4046B5]/10 blur-3xl"/><div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white p-3 shadow-[0_30px_80px_-35px_#141651]"><img src="/manus-storage/mofawtar-hero-accounting_0ca754ed.png" alt="محاسب يراجع لوحة تنظيم الفواتير" className="aspect-[16/11] w-full rounded-[1.45rem] object-cover"/><div className="absolute bottom-7 right-7 left-7 rounded-2xl border border-white/70 bg-white/90 p-4 backdrop-blur"><div className="flex items-center justify-between"><div><p className="text-xs font-bold text-[#4046B5]">لوحة متابعة موحّدة</p><p className="mt-1 text-sm font-extrabold">وضوح أكبر لملفاتك اليومية</p></div><div className="mof-stamp px-3 py-1 text-sm font-extrabold">M</div></div></div></div></div></div></section>
+
+      <section className="border-y border-[#4046B5]/10 bg-white"><div className="container grid gap-4 py-5 md:grid-cols-3">{content.trust.map(item => <div key={item} className="flex items-center gap-3 text-sm font-bold text-[#3d3e57]"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#ECECF7] text-[#4046B5]"><Check className="h-4 w-4"/></span>{item}</div>)}</div></section>
+
+      <section className="mof-section"><div className="container grid gap-10 lg:grid-cols-[.85fr_1.15fr]"><div><p className="mof-eyebrow">تحديات يومية</p><h2 className="mt-4 text-3xl font-extrabold leading-tight md:text-5xl">{content.problems.title}</h2><p className="mt-5 max-w-md leading-8 text-[#5b5c72]">{content.problems.body}</p></div><div className="grid gap-4 sm:grid-cols-3">{content.problems.items.map((item, index) => <article key={item} className="rounded-3xl border border-[#4046B5]/10 bg-white p-6 shadow-[0_20px_45px_-35px_#4046B5]"><span className="font-[Inter] text-4xl font-bold text-[#4046B5]/25">0{index + 1}</span><p className="mt-8 text-base font-extrabold leading-7">{item}</p></article>)}</div></div></section>
+
+      <section id="workflow" className="mof-section bg-[#07081A] text-white"><div className="container"><div className="max-w-xl"><p className="mof-eyebrow text-[#bfc2ff]">{content.workflow.eyebrow}</p><h2 className="mt-4 text-3xl font-extrabold md:text-5xl">{content.workflow.title}</h2></div><div className="mt-12 grid gap-4 md:grid-cols-3">{content.workflow.steps.map((step, index) => <article key={step.title} className="rounded-3xl border border-white/10 bg-white/[.04] p-7"><span className="font-[Inter] text-xs font-bold text-[#bfc2ff]">0{index + 1}</span><h3 className="mt-8 text-2xl font-extrabold">{step.title}</h3><p className="mt-3 leading-7 text-white/65">{step.text}</p></article>)}</div></div></section>
+
+      <section className="mof-section"><div className="container grid items-center gap-10 lg:grid-cols-2"><div className="relative overflow-hidden rounded-[2rem] border border-[#4046B5]/10 bg-[#ECECF7] p-8"><div className="mof-stamp inline-block px-5 py-2 font-[Inter] font-extrabold">MOFAWTAR</div><div className="mt-10 grid grid-cols-12 gap-3"><div className="col-span-7 rounded-2xl bg-white p-5 shadow-lg"><div className="h-3 w-20 rounded bg-[#4046B5]/15"/><div className="mt-8 h-16 rounded-xl bg-[#4046B5]"/><div className="mt-3 h-3 w-3/4 rounded bg-[#ECECF7]"/></div><div className="col-span-5 space-y-3"><div className="h-20 rounded-2xl bg-white shadow-sm"/><div className="h-20 rounded-2xl bg-[#07081A]"/></div></div><p className="mt-8 text-sm font-bold text-[#4046B5]">لقطة توضيحية لواجهة تنظيمية</p></div><div><p className="mof-eyebrow">{content.proof.eyebrow}</p><h2 className="mt-4 text-3xl font-extrabold leading-tight md:text-5xl">{content.proof.title}</h2><p className="mt-5 max-w-lg leading-8 text-[#5b5c72]">{content.proof.body}</p><div className="mt-7 grid gap-3 sm:grid-cols-2">{["متابعة حالة الملفات", "تفاصيل واضحة للعمليات", "مساحة عمل منظمة", "قرارات أسرع للفريق"].map(item => <div key={item} className="flex items-center gap-2 text-sm font-bold"><Check className="h-4 w-4 text-[#4046B5]"/>{item}</div>)}</div></div></div></section>
+
+      <section className="mof-section bg-[#ECECF7]/70"><div className="container grid gap-8 lg:grid-cols-[.9fr_1.1fr]"><div><p className="mof-eyebrow">{content.calculator.eyebrow}</p><h2 className="mt-4 text-3xl font-extrabold leading-tight md:text-5xl">{content.calculator.title}</h2><p className="mt-5 leading-8 text-[#5b5c72]">{content.calculator.body}</p></div><div className="rounded-[2rem] bg-white p-7 shadow-[0_28px_65px_-45px_#4046B5]"><div className="flex items-center justify-between"><Label htmlFor="files" className="font-bold">{content.calculator.label}</Label><span className="rounded-lg bg-[#ECECF7] px-3 py-1 font-[Inter] text-sm font-bold text-[#4046B5]">{files}</span></div><input id="files" type="range" min="1" max="100" value={files} onChange={e => { setFiles(Number(e.target.value)); track("calculator_completed", { persona, uiContext: "calculator", properties: { files: Number(e.target.value) } }); }} className="mt-6 w-full accent-[#4046B5]"/><div className="mt-8 rounded-2xl bg-[#07081A] p-5 text-white"><p className="text-sm text-white/65">تقدير العرض</p><p className="mt-2 text-xl font-extrabold">{content.calculator.result.replace("{hours}", String(Math.max(4, Math.round(files * 1.25))))}</p></div></div></div></section>
+
+      <section className="mof-section"><div className="container grid gap-9 lg:grid-cols-[.8fr_1.2fr]"><div className="rounded-[2rem] bg-[#4046B5] p-8 text-white"><FileDown className="h-8 w-8 text-[#d8d9ff]"/><p className="mt-8 text-xs font-bold tracking-[.18em] text-[#d8d9ff]">{content.lead.eyebrow}</p><h2 className="mt-4 text-3xl font-extrabold leading-tight">{content.lead.title}</h2><p className="mt-4 leading-8 text-white/75">{content.lead.body}</p></div><div className="rounded-[2rem] border border-[#4046B5]/10 bg-white p-8"><form onSubmit={submitLead} className="grid gap-4"><div className="grid gap-2"><Label htmlFor="lead-name">{content.lead.name}</Label><Input id="lead-name" name="name" required /></div><div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="lead-email">{content.lead.email}</Label><Input id="lead-email" name="email" type="email" required dir="ltr" /></div><div className="grid gap-2"><Label htmlFor="lead-phone">{content.lead.phone}</Label><Input id="lead-phone" name="phone" dir="ltr" /></div></div><label className="flex items-start gap-2 text-xs leading-6 text-[#5b5c72]"><input name="optin" type="checkbox" className="mt-1 accent-[#4046B5]"/>{content.lead.optin}</label><div className="flex flex-wrap items-center gap-3"><Button type="submit" disabled={leadMutation.isPending} className="rounded-xl bg-[#4046B5]">{leadSent ? content.lead.success : content.lead.button}</Button><button type="button" onClick={downloadLead} className="text-sm font-bold text-[#4046B5] hover:underline">تنزيل نسخة Demo مباشرة</button></div></form></div></div></section>
+
+      <section id="pricing" className="mof-section bg-[#07081A] text-white"><div className="container"><div className="mx-auto max-w-2xl text-center"><p className="mof-eyebrow text-[#bfc2ff]">{content.pricing.eyebrow}</p><h2 className="mt-4 text-3xl font-extrabold md:text-5xl">{content.pricing.title}</h2><p className="mt-5 leading-8 text-white/70">{content.pricing.body}</p></div><div className="mt-12 grid gap-5 lg:grid-cols-3">{PLANS.slice(0, 3).map(plan => <article key={plan.sku} className={`relative rounded-[2rem] border p-7 ${plan.recommended ? "border-[#c4c7ff] bg-[#ECECF7] text-[#07081A] shadow-[0_25px_55px_-30px_#a0a5ff]" : "border-white/10 bg-white/[.04]"}`}>{plan.recommended && <div className="absolute -top-3 right-6 rounded-full bg-[#4046B5] px-3 py-1 text-xs font-bold text-white">{content.pricing.recommended}</div>}<p className={`text-sm font-bold ${plan.recommended ? "text-[#4046B5]" : "text-[#bfc2ff]"}`}>{plan.files}</p><h3 className="mt-3 text-2xl font-extrabold">{plan.name}</h3><p className={`mt-3 min-h-14 text-sm leading-7 ${plan.recommended ? "text-[#5b5c72]" : "text-white/65"}`}>{plan.description}</p><div className="mt-7"><span className="text-3xl font-extrabold" dir="ltr">{formatEgp(plan.annualPiastres)}</span><span className={`mr-1 text-xs ${plan.recommended ? "text-[#5b5c72]" : "text-white/65"}`}>/ سنويًا + VAT</span></div><Button onClick={() => startCheckout(plan.sku)} className={`mt-7 w-full rounded-xl ${plan.recommended ? "bg-[#4046B5] hover:bg-[#343aa0]" : "bg-white text-[#07081A] hover:bg-[#ECECF7]"}`}>{content.pricing.select}<ArrowLeft className="mr-2 h-4 w-4"/></Button></article>)}</div><div className="mt-8 flex items-center justify-center gap-2 text-xs text-white/60"><Clock3 className="h-4 w-4"/>{campaignActive ? content.offer.detail : content.offer.expired}</div></div></section>
+
+      <section id="faq" className="mof-section"><div className="container grid gap-10 lg:grid-cols-[.75fr_1.25fr]"><div><p className="mof-eyebrow">{content.faq.eyebrow}</p><h2 className="mt-4 text-3xl font-extrabold leading-tight md:text-5xl">{content.faq.title}</h2><Button variant="outline" onClick={() => whatsapp("faq")} className="mt-7 rounded-xl border-[#4046B5]/20 text-[#4046B5]"><MessageCircle className="ml-2 h-4 w-4"/>اسألنا مباشرة</Button></div><div className="divide-y divide-[#4046B5]/10 rounded-[2rem] border border-[#4046B5]/10 bg-white px-6">{content.faq.items.map(item => <details key={item.q} className="group py-6"><summary className="flex list-none items-center justify-between gap-5 font-extrabold"><span>{item.q}</span><ChevronDown className="h-5 w-5 text-[#4046B5] transition-transform group-open:rotate-180"/></summary><p className="mt-4 max-w-2xl leading-8 text-[#5b5c72]">{item.a}</p></details>)}</div></div></section>
+
+      <section className="pb-16"><div className="container"><div className="overflow-hidden rounded-[2rem] bg-[#4046B5] px-7 py-10 text-white md:px-12 md:py-14"><div className="grid items-center gap-8 lg:grid-cols-[1fr_auto]"><div><p className="text-xs font-bold tracking-[.18em] text-[#d8d9ff]">خطوتك التالية</p><h2 className="mt-3 max-w-2xl text-3xl font-extrabold leading-tight md:text-5xl">{content.footer.title}</h2></div><Button size="lg" onClick={() => scrollToId("pricing")} className="h-14 rounded-xl bg-white px-7 text-[#4046B5] hover:bg-[#ECECF7]">{content.footer.button}<ArrowLeft className="mr-2 h-4 w-4"/></Button></div></div></div></section>
+    </main>
+
+    <footer className="border-t border-[#4046B5]/10 py-8"><div className="container flex flex-col items-center justify-between gap-4 text-center text-xs text-[#64657a] md:flex-row"><img src="/manus-storage/mofawtar-wordmark_74721d27.png" alt="مفوتر" className="h-8 w-auto opacity-85"/><p>{content.footer.copyright}</p><a href="/dashboard" className="font-bold text-[#4046B5]">لوحة المؤشرات</a></div></footer>
+    <button onClick={() => whatsapp("floating")} className="fixed bottom-5 left-5 z-40 flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-3 text-sm font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5" aria-label={content.whatsapp.label}><MessageCircle className="h-5 w-5"/><span className="hidden sm:inline">واتساب</span></button>
+
+    {consent === null && <div className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl rounded-2xl border border-[#4046B5]/15 bg-white p-5 shadow-[0_25px_70px_-30px_#07081A]" role="region" aria-label="إعدادات ملفات الارتباط"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="font-extrabold">{content.cookies.title}</p><p className="mt-1 max-w-xl text-xs leading-6 text-[#5b5c72]">{content.cookies.body}</p>{customizeConsent && <div className="mt-3 flex flex-wrap gap-4 text-xs"><label className="flex items-center gap-2"><input type="checkbox" checked={consentDraft.analytics} onChange={e => setConsentDraft({ analytics: e.target.checked, marketing: consentDraft.marketing })}/>{content.cookies.analytics}</label><label className="flex items-center gap-2"><input type="checkbox" checked={consentDraft.marketing} onChange={e => setConsentDraft({ analytics: consentDraft.analytics, marketing: e.target.checked })}/>{content.cookies.marketing}</label></div>}</div><div className="flex shrink-0 flex-wrap gap-2">{customizeConsent ? <Button size="sm" onClick={() => updateConsent(consentDraft)}>{content.cookies.save}</Button> : <><Button size="sm" variant="outline" onClick={() => setCustomizeConsent(true)}>{content.cookies.customize}</Button><Button size="sm" variant="outline" onClick={() => updateConsent({ analytics: false, marketing: false })}>{content.cookies.reject}</Button><Button size="sm" onClick={() => updateConsent({ analytics: true, marketing: true })}>{content.cookies.accept}</Button></>}</div></div></div>}
+    <Dialog open={exitOpen} onOpenChange={setExitOpen}><DialogContent className="max-w-md rounded-3xl p-0"><div className="bg-[#4046B5] p-7 text-white"><p className="text-xs font-bold tracking-[.18em] text-[#d8d9ff]">{content.exit.eyebrow}</p><DialogHeader><DialogTitle className="mt-3 text-2xl text-white">{content.exit.title}</DialogTitle><DialogDescription className="mt-3 leading-7 text-white/75">{content.exit.body}</DialogDescription></DialogHeader></div><div className="flex flex-wrap gap-3 p-6"><Button onClick={() => { setExitOpen(false); scrollToId("lead"); }}>{content.exit.lead}</Button><Button variant="outline" onClick={() => whatsapp("exit_intent")}>{content.exit.whatsapp}</Button><button onClick={() => setExitOpen(false)} className="text-sm font-bold text-[#64657a]">{content.exit.dismiss}</button></div></DialogContent></Dialog>
+  </div>;
 }

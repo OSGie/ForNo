@@ -1,0 +1,16 @@
+{
+  "claims": [
+    {
+      "id": "tax-requirements",
+      "text": "متوافق مع متطلبات مصلحة الضرائب المصرية",
+      "isPlaceholder": false,
+      "usage": "trust"
+    },
+    {
+      "id": "refund-window",
+      "text": "ضمان استرداد كامل خلال 14 يوم",
+      "isPlaceholder": false,
+      "usage": "trust"
+    }
+  ]
+}
