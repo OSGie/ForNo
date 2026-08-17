@@ -27,7 +27,7 @@ export function usePocTracking() {
       eventId: String(raw.event_id), eventName, visitorId: context.visitorId, sessionId: context.sessionId, pagePath: window.location.pathname,
       persona: options.persona ?? null, uiContext: options.uiContext ?? "page", firstTouch: context.firstTouch, lastTouch: context.lastTouch,
       consentAnalytics: consent.analytics, consentMarketing: consent.marketing, properties: options.properties,
-    });
+    }, { onError: () => undefined });
   }, [mutate]);
 }
 

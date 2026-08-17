@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Check, ChevronDown, CircleHelp, Clock3, FileDown, Menu, MessageCircle, ShieldCheck, Sparkles, X } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
 type Persona = "firm" | "company";
@@ -36,6 +36,9 @@ export default function Home() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [files, setFiles] = useState(12);
   const [leadSent, setLeadSent] = useState(false);
+  const initializedRef = useRef(false);
+  const trackRef = useRef(track);
+  trackRef.current = track;
 
   const campaignActive = isCampaignActive(new Date(now));
   const remaining = useMemo(() => formatRemaining(new Date(PROMO.deadlineIso).getTime() - now), [now]);
@@ -43,23 +46,32 @@ export default function Home() {
   const heroText = persona === "firm" ? content.hero.firmText : content.hero.companyText;
 
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
     const queryPersona = new URLSearchParams(window.location.search).get("p");
     const saved = localStorage.getItem("mof_persona") as Persona | null;
     const resolved = queryPersona === "company" || queryPersona === "firm" ? queryPersona : saved;
-    if (resolved) { setPersona(resolved); track("persona_resolved", { persona: resolved, uiContext: queryPersona ? "utm" : "storage" }); }
-    else track("session_started", { uiContext: "landing" });
-    track("page_view", { persona: resolved ?? "firm", uiContext: "landing" });
+    if (resolved) { setPersona(current => current === resolved ? current : resolved); trackRef.current("persona_resolved", { persona: resolved, uiContext: queryPersona ? "utm" : "storage" }); }
+    else trackRef.current("session_started", { uiContext: "landing" });
+    trackRef.current("page_view", { persona: resolved ?? "firm", uiContext: "landing" });
     try { setConsent(JSON.parse(localStorage.getItem("mof_consent") ?? "null")); } catch { setConsent(null); }
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     const eligible = () => window.scrollY > window.innerHeight * .45 || Date.now() - Number(sessionStorage.getItem("mof_entered_at") ?? Date.now()) > 35000;
     if (!sessionStorage.getItem("mof_entered_at")) sessionStorage.setItem("mof_entered_at", String(Date.now()));
     const leave = (event: MouseEvent) => {
       const blocked = sessionStorage.getItem("mof_conversion_blocked") || localStorage.getItem("mof_exit_seen");
-      if (event.clientY <= 5 && eligible() && !blocked && consent) { setExitOpen(true); localStorage.setItem("mof_exit_seen", "1"); track("exit_intent_shown", { persona, uiContext: "desktop_exit" }); }
+      if (event.clientY <= 5 && eligible() && !blocked && consent) { setExitOpen(true); localStorage.setItem("mof_exit_seen", "1"); trackRef.current("exit_intent_shown", { persona, uiContext: "desktop_exit" }); }
     };
     document.addEventListener("mouseout", leave);
-    return () => { window.clearInterval(timer); document.removeEventListener("mouseout", leave); };
-  }, [track, consent, persona]);
+    return () => document.removeEventListener("mouseout", leave);
+  }, [consent, persona]);
 
   const choosePersona = (value: Persona) => { setPersona(value); localStorage.setItem("mof_persona", value); track("persona_selected", { persona: value, uiContext: "hero_persona" }); };
   const updateConsent = (value: Consent) => { localStorage.setItem("mof_consent", JSON.stringify(value)); setConsent(value); window.dataLayer?.push({ event: "consent_updated", analytics_storage: value.analytics ? "granted" : "denied", ad_storage: value.marketing ? "granted" : "denied" }); track("consent_updated", { persona, uiContext: "cookie_banner", properties: value }); };
