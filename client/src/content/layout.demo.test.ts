@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import claims from "./claims.ar.json";
 import layout from "./layout.ar.json";
+import sales from "./sales.ar.json";
 
 describe("محتوى قسم الفيديو التوضيحي", () => {
   it("يحتوي على أربع لقطات تشغيلية مميزة وزر ديمو واضح", () => {
@@ -35,5 +36,11 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(claims.onboarding.steps.map(step => step.number)).toEqual(["01", "02", "03"]);
     expect(claims.onboarding.steps.at(-1)?.title).toBe("صدّر أول تقرير");
     expect(claims.onboarding.paymentNote).toContain("رابط تجريبي");
+  });
+
+  it("يعرض هدية حاسبة المرتبات بعد جمع البريد والهاتف مع رابط الأداة المعتمد", () => {
+    expect(sales.leadMagnet.email).toBeTruthy();
+    expect(sales.leadMagnet.phone).toBeTruthy();
+    expect(sales.leadMagnet.url).toBe("https://mofawtar.com/tax-calculator-2/");
   });
 });

@@ -3,6 +3,7 @@ import sales from "@/content/sales.ar.json";
 import layout from "@/content/layout.ar.json";
 import claims from "@/content/claims.ar.json";
 import { getPocContext, usePocTracking } from "@/hooks/usePocTracking";
+import { trpc } from "@/lib/trpc";
 import { ADDONS, formatEgp, getPlansForPersona, isCampaignActive, PROMO, type Persona } from "@shared/poc";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -50,8 +51,15 @@ export default function Home() {
   const [activeOperating, setActiveOperating] = useState(0);
   const [demoOpen, setDemoOpen] = useState(false);
   const [activeDemoTab, setActiveDemoTab] = useState(0);
+  const [leadMagnetOpen, setLeadMagnetOpen] = useState(false);
+  const [leadMagnetDismissed, setLeadMagnetDismissed] = useState(false);
+  const [leadMagnetDelivered, setLeadMagnetDelivered] = useState(false);
+  const [leadMagnetEmail, setLeadMagnetEmail] = useState("");
+  const [leadMagnetPhone, setLeadMagnetPhone] = useState("");
+  const [leadMagnetError, setLeadMagnetError] = useState("");
   const demoSectionRef = useRef<HTMLElement>(null);
   const capabilitiesSectionRef = useRef<HTMLElement>(null);
+  const leadMagnetMutation = trpc.poc.createLead.useMutation();
   const plans = useMemo(() => getPlansForPersona(persona), [persona]);
   const selectedPlan = plans.find(plan => plan.sku === selectedPlanSku) ?? plans[0];
   const personaCopy = sales[persona];
@@ -91,6 +99,11 @@ export default function Home() {
     return () => observer.disconnect();
   }, [persona]);
   useEffect(() => {
+    if (!initialized || gateOpen || leadMagnetDismissed || leadMagnetDelivered) return;
+    const timeout = window.setTimeout(() => { setLeadMagnetOpen(true); trackRef.current("lead_magnet_shown", { persona, uiContext: "payroll_calculator_popup" }); }, 10000);
+    return () => window.clearTimeout(timeout);
+  }, [gateOpen, initialized, leadMagnetDelivered, leadMagnetDismissed, persona]);
+  useEffect(() => {
     if (!initialized || !consent) return;
     const onExit = (event: MouseEvent) => {
       const eligible = window.scrollY > window.innerHeight * .65 || Date.now() - Number(sessionStorage.getItem("mof_visit_started") ?? Date.now()) > 40000;
@@ -114,6 +127,14 @@ export default function Home() {
   const handleCapabilityAction = (capabilityId: string, status: string) => { track("capability_cta_clicked", { persona, uiContext: "capabilities_section", properties: { capability_id: capabilityId, status } }); if (status === "coming") whatsapp(`capability_waitlist_${capabilityId}`); else scrollToId(status === "special" ? "pricing" : "pricing"); };
   const handleIssuanceDocumentClick = (documentId: string) => track("issuance_document_clicked", { persona, uiContext: "issuance_section", properties: { document_id: documentId } });
   const handleOnboardingCta = () => { track("onboarding_pricing_clicked", { persona, uiContext: "onboarding_section" }); scrollToId("pricing"); };
+  const closeLeadMagnet = () => { setLeadMagnetOpen(false); setLeadMagnetDismissed(true); track("lead_magnet_dismissed", { persona, uiContext: "payroll_calculator_popup", properties: { delivered: leadMagnetDelivered } }); };
+  const submitLeadMagnet = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const phone = leadMagnetPhone.trim();
+    if (!/^\+?[0-9\s-]{8,20}$/.test(phone)) { setLeadMagnetError("يرجى إدخال رقم هاتف صحيح."); return; }
+    setLeadMagnetError("");
+    leadMagnetMutation.mutate({ name: "مهتم بحاسبة ضريبة المرتبات والتأمينات", email: leadMagnetEmail.trim(), phone, visitorId: getPocContext().visitorId, source: "payroll_tax_calculator_popup", marketingOptIn: false }, { onSuccess: () => { setLeadMagnetDelivered(true); track("lead_magnet_submitted", { persona, uiContext: "payroll_calculator_popup" }); }, onError: () => setLeadMagnetError("تعذر تسجيل البيانات الآن. حاول مرة أخرى.") });
+  };
   const saveConsent = (value: Consent) => { localStorage.setItem("mof_consent", JSON.stringify(value)); setConsent(value); track("consent_updated", { persona, uiContext: "cookie" }); };
   const submitGuide = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setLeadSent(true); sessionStorage.setItem("mof_conversion_blocked", "lead"); track("lead_submitted", { persona, uiContext: "guide" }); };
   const activeCampaign = isCampaignActive(new Date(now));
@@ -163,5 +184,6 @@ export default function Home() {
     <Dialog open={gateOpen} onOpenChange={open => { if (!open) track("persona_gate_dismissed", { persona, uiContext: "gate" }); setGateOpen(open); }}><DialogContent className="max-w-2xl overflow-hidden rounded-[2rem] border-0 p-0"><div className="bg-[#0B0B22] p-7 text-white"><p className="text-xs font-bold tracking-[.18em] text-[#c6c8ff]">{sales.gate.eyebrow}</p><DialogHeader><DialogTitle className="mt-3 text-3xl text-white">{sales.gate.title}</DialogTitle><DialogDescription className="mt-3 leading-7 text-white/70">{sales.gate.body}</DialogDescription></DialogHeader></div><div className="grid gap-4 p-6 sm:grid-cols-2"><button onClick={() => choosePersona("firm", "gate")} className="rounded-2xl border border-[#4046B5]/15 p-6 text-right transition hover:-translate-y-0.5 hover:border-[#4046B5] hover:bg-[#F7F7FF]"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#EDEEF9] text-[#4046B5]"><UsersRound className="h-5 w-5"/></span><h3 className="mt-5 text-xl font-extrabold">{sales.gate.firm.title}</h3><p className="mt-2 text-sm leading-7 text-[#5b5c72]">{sales.gate.firm.body}</p></button><button onClick={() => choosePersona("company", "gate")} className="rounded-2xl border border-[#4046B5]/15 p-6 text-right transition hover:-translate-y-0.5 hover:border-[#4046B5] hover:bg-[#F7F7FF]"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#EDEEF9] text-[#4046B5]"><MonitorSmartphone className="h-5 w-5"/></span><h3 className="mt-5 text-xl font-extrabold">{sales.gate.company.title}</h3><p className="mt-2 text-sm leading-7 text-[#5b5c72]">{sales.gate.company.body}</p></button><button onClick={() => { setGateOpen(false); track("persona_gate_skipped", { persona, uiContext: "gate" }); }} className="sm:col-span-2 text-sm font-bold text-[#64657a] hover:text-[#4046B5]">{sales.gate.skip}</button></div></DialogContent></Dialog>
     <Dialog open={exitOpen} onOpenChange={setExitOpen}><DialogContent className="max-w-md rounded-3xl"><DialogHeader><p className="text-xs font-bold tracking-[.18em] text-[#4046B5]">قبل أن تغادر</p><DialogTitle className="mt-2 text-2xl">هل تفضل بداية أسرع؟</DialogTitle><DialogDescription className="leading-7">أخبرنا بعدد الملفات أو المستخدمين، وسنساعدك في تحديد سعة مناسبة قبل اختيار الباقة.</DialogDescription></DialogHeader><div className="mt-3 flex flex-wrap gap-3"><Button onClick={() => whatsapp("exit_intent")} className="rounded-xl bg-[#4046B5]"><MessageCircle className="ml-2 h-4 w-4"/>تواصل عبر واتساب</Button><Button variant="outline" onClick={() => setExitOpen(false)} className="rounded-xl">أكمل التصفح</Button></div></DialogContent></Dialog>
     <Dialog open={demoOpen} onOpenChange={open => { setDemoOpen(open); if (!open) track("demo_preview_closed", { persona, uiContext: "demo_modal" }); }}><DialogContent className="max-w-4xl overflow-hidden rounded-[2rem] border-0 bg-[#0B0B22] p-0 text-white"><div className="border-b border-white/10 p-6 md:p-8"><p className="text-xs font-bold tracking-[.18em] text-[#c6c8ff]">{layout.demo.duration}</p><DialogHeader><DialogTitle className="mt-3 text-3xl text-white">{layout.demo.modalTitle}</DialogTitle><DialogDescription className="mt-3 max-w-2xl leading-7 text-white/65">{layout.demo.modalBody}</DialogDescription></DialogHeader></div><div className="p-6 md:p-8"><div className="grid gap-4 sm:grid-cols-2">{layout.demo.steps.map((step, index) => <div key={step} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[.06] p-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#4046B5] text-sm font-extrabold">0{index + 1}</span><span className="text-sm font-bold">{step}</span></div>)}</div><div className="mt-7 flex flex-wrap gap-3"><Button onClick={() => { track("demo_to_pricing_clicked", { persona, uiContext: "demo_modal" }); setDemoOpen(false); scrollToId("pricing"); }} className="rounded-xl bg-white text-[#4046B5] hover:bg-[#EDEEF9]">شاهد الباقات</Button><Button variant="outline" onClick={() => whatsapp("demo_modal")} className="rounded-xl border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"><MessageCircle className="ml-2 h-4 w-4"/>اسألنا عن ديمو حقيقي</Button></div></div></DialogContent></Dialog>
+    <Dialog open={leadMagnetOpen} onOpenChange={open => { if (!open && leadMagnetOpen) closeLeadMagnet(); else setLeadMagnetOpen(open); }}><DialogContent className="max-w-md overflow-hidden rounded-[2rem] border-0 p-0"><div className="bg-[#0B0B22] p-7 text-white"><p className="text-xs font-bold tracking-[.16em] text-[#c6c8ff]">{sales.leadMagnet.eyebrow}</p><DialogHeader><DialogTitle className="mt-3 text-3xl leading-tight text-white">{sales.leadMagnet.title}</DialogTitle><DialogDescription className="mt-3 leading-7 text-white/70">{sales.leadMagnet.body}</DialogDescription></DialogHeader></div><div className="p-6">{leadMagnetDelivered ? <div className="text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#EDEEF9] text-[#4046B5]"><Check className="h-7 w-7"/></div><h3 className="mt-5 text-2xl font-extrabold">{sales.leadMagnet.successTitle}</h3><p className="mt-3 leading-7 text-[#5b5c72]">{sales.leadMagnet.successBody}</p><a href={sales.leadMagnet.url} target="_blank" rel="noreferrer" onClick={() => track("lead_magnet_calculator_opened", { persona, uiContext: "payroll_calculator_popup" })} className="mt-6 inline-flex h-12 items-center rounded-xl bg-[#4046B5] px-5 text-sm font-bold text-white transition hover:bg-[#343aa0]">{sales.leadMagnet.openCalculator}<ArrowLeft className="mr-2 h-4 w-4"/></a></div> : <form onSubmit={submitLeadMagnet} className="space-y-4"><label className="block text-sm font-bold"><span>{sales.leadMagnet.email}</span><input required value={leadMagnetEmail} onChange={event => setLeadMagnetEmail(event.target.value)} type="email" dir="ltr" className="mt-2 h-12 w-full rounded-xl border border-[#4046B5]/15 bg-[#fbfbff] px-4 text-sm text-[#090A20] outline-none transition focus:border-[#4046B5]"/></label><label className="block text-sm font-bold"><span>{sales.leadMagnet.phone}</span><input required value={leadMagnetPhone} onChange={event => setLeadMagnetPhone(event.target.value)} type="tel" inputMode="tel" placeholder="01xxxxxxxxx" dir="ltr" className="mt-2 h-12 w-full rounded-xl border border-[#4046B5]/15 bg-[#fbfbff] px-4 text-sm text-[#090A20] outline-none transition focus:border-[#4046B5]"/></label>{leadMagnetError && <p role="alert" className="rounded-xl bg-[#fff0ed] p-3 text-xs font-bold text-[#b84025]">{leadMagnetError}</p>}<p className="text-xs leading-6 text-[#6b6c80]">{sales.leadMagnet.note}</p><Button type="submit" disabled={leadMagnetMutation.isPending} className="h-12 w-full rounded-xl bg-[#4046B5] font-bold hover:bg-[#343aa0]">{leadMagnetMutation.isPending ? sales.leadMagnet.processing : sales.leadMagnet.submit}</Button></form>}<button type="button" onClick={closeLeadMagnet} className="mt-5 w-full text-center text-xs font-bold text-[#66677d] hover:text-[#4046B5]">{sales.leadMagnet.dismiss}</button></div></DialogContent></Dialog>
   </div>;
 }
