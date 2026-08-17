@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateQuote } from "@shared/poc";
+import { calculateQuote, getPlansForPersona } from "@shared/poc";
 import { buildDemoContractHtml, makeContractNumber } from "./poc-contract";
 
 describe("PoC pricing", () => {
@@ -14,6 +14,11 @@ describe("PoC pricing", () => {
     const quote = calculateQuote("founder", [], "annual", new Date("2026-09-02T10:00:00+03:00"));
     expect(quote.discountPiastres).toBe(0);
     expect(quote.totalPiastres).toBe(28500);
+  });
+  it("exposes four accounting-office plans and does not bill an included bundle twice", () => {
+    expect(getPlansForPersona("firm")).toHaveLength(4);
+    const quote = calculateQuote("special", ["points"], "annual", new Date("2026-08-20T10:00:00+03:00"));
+    expect(quote.addons).toHaveLength(0);
   });
 });
 
