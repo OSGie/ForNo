@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import claims from "./claims.ar.json";
 import layout from "./layout.ar.json";
 
 describe("محتوى قسم الفيديو التوضيحي", () => {
@@ -14,5 +15,11 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(layout.firm.pain.items).toHaveLength(4);
     expect(layout.firm.pain.items.map(item => item.label)).toEqual(["دخول متكرر", "بحث مرهق", "تجميع يدوي", "صلاحيات غائبة"]);
     expect(layout.firm.value.title).toContain("محتاج نظام منظم");
+  });
+
+  it("يفصل قدرات المنتج المتاحة عن المخطط لها ويحفظ رسائلها ضمن سجل الادعاءات", () => {
+    expect(layout.capabilities.items.map(item => item.id)).toEqual(["reader", "sender", "payroll", "firms"]);
+    expect(layout.capabilities.items.map(item => item.status)).toEqual(["available", "special", "coming", "coming"]);
+    expect(Object.values(claims.capabilities).every(claim => claim.isPlaceholder && claim.body)).toBe(true);
   });
 });
