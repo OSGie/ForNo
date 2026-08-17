@@ -8,4 +8,11 @@ describe("محتوى قسم الفيديو التوضيحي", () => {
     expect(layout.demo.tabs.map(tab => tab.id)).toEqual(["files", "vat", "form41", "permissions"]);
     expect(layout.demo.tabs.every(tab => tab.label && tab.title && tab.body && tab.metric && tab.detail)).toBe(true);
   });
+
+  it("يعرض لمسار مكتب المحاسبة تحديات العمل اليدوي الأربع وخاتمة الحل", () => {
+    expect(layout.firm.pain.title).toContain("آخر الشهر");
+    expect(layout.firm.pain.items).toHaveLength(4);
+    expect(layout.firm.pain.items.map(item => item.label)).toEqual(["دخول متكرر", "بحث مرهق", "تجميع يدوي", "صلاحيات غائبة"]);
+    expect(layout.firm.value.title).toContain("محتاج نظام منظم");
+  });
 });
